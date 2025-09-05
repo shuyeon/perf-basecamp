@@ -3668,8 +3668,7 @@ const CustomCursor = ({ text = '' }) => {
     const cursorRef = (0,react.useRef)(null);
     (0,react.useEffect)(() => {
         if (cursorRef.current) {
-            cursorRef.current.style.top = `${mousePosition.pageY}px`;
-            cursorRef.current.style.left = `${mousePosition.pageX}px`;
+            cursorRef.current.style.transform = `translate(${mousePosition.pageX}px, ${mousePosition.pageY}px)`;
         }
     }, [mousePosition]);
     return ((0,jsx_runtime.jsx)("div", Object.assign({ ref: cursorRef, className: CustomCursor_CustomCursor_module.cursor }, { children: cursorTextChars.map((char, index) => ((0,jsx_runtime.jsx)("span", Object.assign({ className: CustomCursor_CustomCursor_module.character }, { children: char }), index))) })));
@@ -3854,6 +3853,13 @@ if (!API_KEY) {
 }
 const BASE_URL = 'https://api.giphy.com/v1/gifs';
 const DEFAULT_FETCH_COUNT = 16;
+const TRENDING_GIF_API = apiClient
+    .appendSearchParams(new URL(`${BASE_URL}/trending`), {
+    api_key: API_KEY,
+    limit: `${DEFAULT_FETCH_COUNT}`,
+    rating: 'g'
+})
+    .toString();
 const convertResponseToModel = (gifList) => {
     return gifList.map(({ id, title, images }) => {
         return {
@@ -3880,12 +3886,27 @@ const fetchGifs = (url) => gifAPIService_awaiter(void 0, void 0, void 0, functio
 });
 const gifAPIService = {
     getTrending: () => gifAPIService_awaiter(void 0, void 0, void 0, function* () {
-        const url = apiClient.appendSearchParams(new URL(`${BASE_URL}/trending`), {
-            api_key: API_KEY,
-            limit: `${DEFAULT_FETCH_COUNT}`,
-            rating: 'g'
-        });
-        return fetchGifs(url);
+        try {
+            const cacheStorage = yield caches.open('trending');
+            const cachedResponse = yield cacheStorage.match(TRENDING_GIF_API);
+            if (cachedResponse) {
+                const gifs = yield cachedResponse.json();
+                return convertResponseToModel(gifs.data);
+            }
+            const response = yield fetch(TRENDING_GIF_API);
+            if (response.ok) {
+                yield cacheStorage.put(TRENDING_GIF_API, response.clone());
+                const gifs = yield response.json();
+                return convertResponseToModel(gifs.data);
+            }
+            else {
+                throw new Error('네트워크 요청 실패!');
+            }
+        }
+        catch (e) {
+            console.error('getTrending error:', e);
+            return [];
+        }
     }),
     searchByKeyword: (keyword, page) => gifAPIService_awaiter(void 0, void 0, void 0, function* () {
         const url = apiClient.appendSearchParams(new URL(`${BASE_URL}/search`), {
@@ -6728,10 +6749,11 @@ var GifItem_module_update = injectStylesIntoStyleTag_default()(GifItem_module/* 
 ;// CONCATENATED MODULE: ./src/pages/Search/components/GifItem/GifItem.tsx
 
 
+
 const GifItem = ({ imageUrl = '', title = '' }) => {
     return ((0,jsx_runtime.jsxs)("div", Object.assign({ className: GifItem_GifItem_module.gifItem }, { children: [(0,jsx_runtime.jsx)("img", { className: GifItem_GifItem_module.gifImage, src: imageUrl }), (0,jsx_runtime.jsxs)("div", Object.assign({ className: GifItem_GifItem_module.gifTitleContainer }, { children: [(0,jsx_runtime.jsx)("div", { className: GifItem_GifItem_module.gifTitleBg }), (0,jsx_runtime.jsx)("h4", Object.assign({ className: GifItem_GifItem_module.gifTitle }, { children: title }))] }))] })));
 };
-/* harmony default export */ const GifItem_GifItem = (GifItem);
+/* harmony default export */ const GifItem_GifItem = (react.memo(GifItem));
 
 // EXTERNAL MODULE: ./node_modules/css-loader/dist/cjs.js!./src/pages/Search/components/SearchResult/SearchResult.module.css
 var SearchResult_module = __webpack_require__(316);
@@ -7090,7 +7112,7 @@ var App_update = injectStylesIntoStyleTag_default()(App/* default */.A, App_opti
 
 
 const App_App = () => {
-    return ((0,jsx_runtime.jsxs)(BrowserRouter, Object.assign({ basename: '/perf-basecamp' }, { children: [(0,jsx_runtime.jsx)(NavBar_NavBar, {}), (0,jsx_runtime.jsxs)(Routes, { children: [(0,jsx_runtime.jsx)(Route, { path: "/", element: (0,jsx_runtime.jsx)(Home_Home, {}) }), (0,jsx_runtime.jsx)(Route, { path: "/search", element: (0,jsx_runtime.jsx)(Search_Search, {}) })] }), (0,jsx_runtime.jsx)(Footer_Footer, {})] })));
+    return ((0,jsx_runtime.jsxs)(BrowserRouter, { children: [(0,jsx_runtime.jsx)(NavBar_NavBar, {}), (0,jsx_runtime.jsxs)(Routes, { children: [(0,jsx_runtime.jsx)(Route, { path: "/", element: (0,jsx_runtime.jsx)(Home_Home, {}) }), (0,jsx_runtime.jsx)(Route, { path: "/search", element: (0,jsx_runtime.jsx)(Search_Search, {}) })] }), (0,jsx_runtime.jsx)(Footer_Footer, {})] }));
 };
 /* harmony default export */ const src_App_0 = (App_App);
 
