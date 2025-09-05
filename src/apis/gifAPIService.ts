@@ -32,7 +32,6 @@ const convertResponseToModel = (gifList: IGif[]): GifImageModel[] => {
 const fetchGifs = async (url: URL): Promise<GifImageModel[]> => {
   try {
     const gifs = await apiClient.fetch<GifsResult>(url);
-
     return convertResponseToModel(gifs.data);
   } catch (error) {
     if (error instanceof ApiError) {
@@ -69,7 +68,15 @@ export const gifAPIService = {
       return [];
     }
   },
-  //언제 없애주세요 추가하기!
+
+  clearTrendingCache: async (): Promise<void> => {
+    try {
+      const cacheStorage = await caches.open('trending');
+      await cacheStorage.delete(TRENDING_GIF_API);
+    } catch (e) {
+      console.error('clearTrendingCache error:', e);
+    }
+  },
 
   searchByKeyword: async (keyword: string, page: number): Promise<GifImageModel[]> => {
     const url = apiClient.appendSearchParams(new URL(`${BASE_URL}/search`), {
