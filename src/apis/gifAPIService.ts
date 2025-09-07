@@ -11,13 +11,6 @@ if (!API_KEY) {
 
 const BASE_URL = 'https://api.giphy.com/v1/gifs';
 const DEFAULT_FETCH_COUNT = 16;
-const TRENDING_GIF_API = apiClient
-  .appendSearchParams(new URL(`${BASE_URL}/trending`), {
-    api_key: API_KEY,
-    limit: `${DEFAULT_FETCH_COUNT}`,
-    rating: 'g'
-  })
-  .toString();
 
 const convertResponseToModel = (gifList: IGif[]): GifImageModel[] => {
   return gifList.map(({ id, title, images }) => {
@@ -32,6 +25,7 @@ const convertResponseToModel = (gifList: IGif[]): GifImageModel[] => {
 const fetchGifs = async (url: URL): Promise<GifImageModel[]> => {
   try {
     const gifs = await apiClient.fetch<GifsResult>(url);
+
     return convertResponseToModel(gifs.data);
   } catch (error) {
     if (error instanceof ApiError) {
@@ -43,41 +37,64 @@ const fetchGifs = async (url: URL): Promise<GifImageModel[]> => {
   }
 };
 
+const requestAndCache = async (url: URL, cacheKey: string): Promise<GifImageModel[]> => {
+  const cacheStorage = await caches.open(cacheKey);
+
+  const cachedResponse = await cacheStorage.match(url.toString());
+  if (cachedResponse) {
+    const gifs: GifsResult = await cachedResponse.json();
+    return convertResponseToModel(gifs.data);
+  }
+
+  try {
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error('네트워크 요청 실패!');
+
+    await cacheStorage.put(url.toString(), response.clone());
+
+    const gifs: GifsResult = await response.json();
+    return convertResponseToModel(gifs.data);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      console.error(`API Error: ${error.status} - ${error.message}`);
+    } else {
+      console.error('Unexpected error:', error);
+    }
+    return [];
+  }
+};
+
 export const gifAPIService = {
+  /**
+   * treding gif 목록을 가져옵니다.
+   * @returns {Promise<GifImageModel[]>}
+   * @ref https://developers.giphy.com/docs/api/endpoint#!/gifs/trending
+   */
   getTrending: async (): Promise<GifImageModel[]> => {
-    try {
-      const cacheStorage = await caches.open('trending');
-      const cachedResponse = await cacheStorage.match(TRENDING_GIF_API);
-
-      if (cachedResponse) {
-        const gifs: GifsResult = await cachedResponse.json();
-        return convertResponseToModel(gifs.data);
-      }
-
-      const response = await fetch(TRENDING_GIF_API);
-
-      if (response.ok) {
-        await cacheStorage.put(TRENDING_GIF_API, response.clone());
-        const gifs: GifsResult = await response.json();
-        return convertResponseToModel(gifs.data);
-      } else {
-        throw new Error('네트워크 요청 실패!');
-      }
-    } catch (e) {
-      console.error('getTrending error:', e);
-      return [];
-    }
+    const url = apiClient.appendSearchParams(new URL(`${BASE_URL}/trending`), {
+      api_key: API_KEY,
+      limit: `${DEFAULT_FETCH_COUNT}`,
+      rating: 'g'
+    });
+    return requestAndCache(url, 'trending');
   },
 
-  clearTrendingCache: async (): Promise<void> => {
-    try {
-      const cacheStorage = await caches.open('trending');
-      await cacheStorage.delete(TRENDING_GIF_API);
-    } catch (e) {
-      console.error('clearTrendingCache error:', e);
+  clearTrendingCacheHourly: async (): Promise<void> => {
+    const lastClearedAt = localStorage.getItem('trendingCacheClearedAt');
+
+    if (!lastClearedAt || Date.now() - Number(lastClearedAt) > 3600000) {
+      await caches.delete('trending');
+      localStorage.setItem('trendingCacheClearedAt', Date.now().toString());
+      console.log('Trending cache cleared (hourly)');
     }
   },
-
+  /**
+   * 검색어에 맞는 gif 목록을 가져옵니다.
+   * @param {string} keyword
+   * @param {number} page
+   * @returns {Promise<GifImageModel[]>}
+   * @ref https://developers.giphy.com/docs/api/endpoint#!/gifs/search
+   */
   searchByKeyword: async (keyword: string, page: number): Promise<GifImageModel[]> => {
     const url = apiClient.appendSearchParams(new URL(`${BASE_URL}/search`), {
       api_key: API_KEY,
