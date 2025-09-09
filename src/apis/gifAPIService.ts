@@ -42,17 +42,27 @@ const requestAndCache = async (url: URL, cacheKey: string): Promise<GifImageMode
 
   const cachedResponse = await cacheStorage.match(url.toString());
   if (cachedResponse) {
-    const gifs: GifsResult = await cachedResponse.json();
-    return convertResponseToModel(gifs.data);
+    const { data, expires_at } = await cachedResponse.json();
+
+    if (Date.now() < expires_at) {
+      return convertResponseToModel(data);
+    } else {
+      await cacheStorage.delete(url.toString());
+    }
   }
 
   try {
     const response = await fetch(url.toString());
     if (!response.ok) throw new Error('네트워크 요청 실패!');
-
-    await cacheStorage.put(url.toString(), response.clone());
-
     const gifs: GifsResult = await response.json();
+    const responseWithExpiry = new Response(
+      JSON.stringify({
+        data: gifs.data,
+        cached_at: Date.now(),
+        expires_at: Date.now() + 60 * 1000
+      })
+    );
+    await cacheStorage.put(url.toString(), responseWithExpiry);
     return convertResponseToModel(gifs.data);
   } catch (error) {
     if (error instanceof ApiError) {
@@ -79,15 +89,6 @@ export const gifAPIService = {
     return requestAndCache(url, 'trending');
   },
 
-  clearTrendingCacheHourly: async (): Promise<void> => {
-    const lastClearedAt = localStorage.getItem('trendingCacheClearedAt');
-
-    if (!lastClearedAt || Date.now() - Number(lastClearedAt) > 3600000) {
-      await caches.delete('trending');
-      localStorage.setItem('trendingCacheClearedAt', Date.now().toString());
-      console.log('Trending cache cleared (hourly)');
-    }
-  },
   /**
    * 검색어에 맞는 gif 목록을 가져옵니다.
    * @param {string} keyword
